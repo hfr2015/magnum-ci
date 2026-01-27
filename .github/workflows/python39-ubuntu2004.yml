@@ -1,0 +1,193 @@
+name: Python 3.9 Ubuntu 20.04
+
+on: [push, pull_request, workflow_dispatch]
+
+# Cancel in-progress builds on push to same branch / PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASIS_VERSION: 1_15_update2
+  ASSIMP_VERSION: 5.3.1
+  MESHOPTIMIZER_VERSION: "0.25"
+  SDL_VERSION: 2.28.5
+  PYBIND_VERSION: 2.11.1
+  ZLIB_VERSION: 1.3.1
+  ZLIBNG_VERSION: 2.1.6
+  PNG_VERSION: 1.6.42
+  JPEG_VERSION: 3.0.2
+  OPENEXR_VERSION: 3.2.1
+  SPNG_VERSION: 0.7.4
+  WEBP_VERSION: 1.3.2
+  GLSLANG_VERSION: 8.13.3743
+  SPIRVTOOLS_VERSION: 2020.4
+  ZSTD_VERSION: 1.5.5
+
+jobs:
+  ubuntu2004-python39:
+    name: ubuntu-20.04-python3.9
+    runs-on: ubuntu-latest
+    container: ubuntu:focal-20230412
+    steps:
+    - name: Install base build tools, OpenGL and Vulkan
+      run: |
+        apt update
+        apt install -y libgl1-mesa-dev libvulkan-dev wget unzip chrpath ninja-build cmake g++ software-properties-common libexpat1-dev
+        # Installing the tzdata package ASKS FOR TIMEZONE IN THE CONSOLE
+        DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
+        mkdir -p deps
+    
+    - name: Install Git
+      run: |
+        apt install -y git
+    
+    - name: Install Python 3.9
+      run: |
+        apt install -y python3.9 python3.9-dev python3.9-venv python3-pip
+        python3.9 -m pip install --upgrade pip
+        python3.9 -m pip install setuptools wheel
+    
+    - name: Add a librt symlink for SPIRV-Tools
+      run: |
+        ln -s /lib/x86_64-linux-gnu/librt.so.1 /usr/lib/x86_64-linux-gnu/librt.so
+    
+    - name: Clone Corrade
+      uses: actions/checkout@v4
+      with:
+        repository: mosra/corrade
+        path: corrade
+        fetch-depth: 0
+    
+    - name: Clone Magnum
+      uses: actions/checkout@v4
+      with:
+        repository: mosra/magnum
+        path: magnum
+        fetch-depth: 0
+    
+    - name: Clone Magnum Plugins
+      uses: actions/checkout@v4
+      with:
+        repository: mosra/magnum-plugins
+        path: magnum-plugins
+        fetch-depth: 0
+    
+    - name: Clone Magnum Extras
+      uses: actions/checkout@v4
+      with:
+        repository: mosra/magnum-extras
+        path: magnum-extras
+        fetch-depth: 0
+    
+    - name: Clone Magnum Bindings
+      uses: actions/checkout@v4
+      with:
+        repository: mosra/magnum-bindings
+        path: magnum-bindings
+        fetch-depth: 0
+    
+    - name: Fetch Pybind11
+      run: |
+        wget --no-clobber https://github.com/pybind/pybind11/archive/v${{ env.PYBIND_VERSION }}.tar.gz
+        tar -xzf v${{ env.PYBIND_VERSION }}.tar.gz
+    
+    - name: Fetch prebuilt SDL
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/sdl-${{ env.SDL_VERSION }}-ubuntu-20.04.zip
+        unzip sdl-${{ env.SDL_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Fetch prebuilt meshoptimizer
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/meshoptimizer-${{ env.MESHOPTIMIZER_VERSION }}-ubuntu-20.04.zip
+        unzip meshoptimizer-${{ env.MESHOPTIMIZER_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Fetch prebuilt Assimp
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/assimp-${{ env.ASSIMP_VERSION }}-ubuntu-20.04.zip
+        unzip assimp-${{ env.ASSIMP_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Fetch prebuilt zlib
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/zlib-${{ env.ZLIB_VERSION }}-ubuntu-20.04.zip
+        unzip zlib-${{ env.ZLIB_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Fetch prebuilt libpng
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/libpng-${{ env.PNG_VERSION }}-ubuntu-20.04.zip
+        unzip libpng-${{ env.PNG_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Fetch prebuilt libjpeg-turbo
+      run: |
+        cd deps
+        wget https://ci.magnum.graphics/libjpeg-turbo-${{ env.JPEG_VERSION }}-ubuntu-20.04.zip
+        unzip libjpeg-turbo-${{ env.JPEG_VERSION }}-ubuntu-20.04.zip
+    
+    - name: Build & install Corrade
+      run: |
+        mkdir corrade-build && cd corrade-build
+        cmake ../corrade \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$(pwd)/../install \
+          -DCORRADE_BUILD_STATIC=ON \
+          -G Ninja
+        ninja install
+    
+    - name: Build & install Magnum
+      run: |
+        mkdir magnum-build && cd magnum-build
+        cmake ../magnum \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$(pwd)/../install \
+          -DCMAKE_PREFIX_PATH=$(pwd)/../deps \
+          -DMAGNUM_WITH_GL=ON \
+          -DMAGNUM_WITH_VK=ON \
+          -DMAGNUM_BUILD_STATIC=ON \
+          -G Ninja
+        ninja install
+    
+    - name: Build & install Magnum Plugins
+      run: |
+        mkdir magnum-plugins-build && cd magnum-plugins-build
+        cmake ../magnum-plugins \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$(pwd)/../install \
+          -DCMAKE_PREFIX_PATH="$(pwd)/../deps;$(pwd)/../install" \
+          -DMAGNUM_WITH_ASSIMPIMPORTER=ON \
+          -DMAGNUM_WITH_BASISIMPORTER=ON \
+          -DMAGNUM_BUILD_STATIC=ON \
+          -G Ninja
+        ninja install
+    
+    - name: Build Magnum Bindings for Python 3.9
+      run: |
+        mkdir magnum-bindings-build && cd magnum-bindings-build
+        cmake ../magnum-bindings \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$(pwd)/../install \
+          -DCMAKE_PREFIX_PATH=$(pwd)/../install \
+          -DPython_EXECUTABLE=/usr/bin/python3.9 \
+          -Dpybind11_DIR=$(pwd)/../pybind11-${{ env.PYBIND_VERSION }} \
+          -G Ninja
+        ninja
+    
+    - name: Test Python 3.9 bindings
+      run: |
+        cd magnum-bindings-build
+        PYTHONPATH=$(pwd)/src/python python3.9 -c "import magnum; print('Magnum Python bindings loaded successfully')"
+    
+    - name: Package Python 3.9 wheel
+      run: |
+        cd magnum-bindings-build
+        python3.9 setup.py bdist_wheel
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: magnum-python39-ubuntu2004
+        path: magnum-bindings-build/dist/*.whl
