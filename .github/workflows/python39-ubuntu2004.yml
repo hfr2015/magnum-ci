@@ -42,11 +42,13 @@ jobs:
       run: |
         apt install -y git
     
-    - name: Install Python 3.9
+    - name: Install Python 3.9 from deadsnakes PPA
       run: |
-        apt install -y python3.9 python3.9-dev python3.9-venv python3-pip
-        python3.9 -m pip install --upgrade pip
-        python3.9 -m pip install setuptools wheel
+        add-apt-repository ppa:deadsnakes/ppa
+        apt update
+        apt install -y python3.9 python3.9-dev python3.9-venv
+        python3.9 -m ensurepip --altinstall
+        pip3.9 install setuptools wheel
     
     - name: Add a librt symlink for SPIRV-Tools
       run: |
